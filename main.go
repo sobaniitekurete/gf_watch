@@ -31,7 +31,6 @@ func init() {
 
 var device string
 
-// devices
 func main() {
 	if b, err := exec.Command(Config.NoxPath+"nox_adb.exe", "devices").Output(); err != nil {
 		log.Fatalln(err)
