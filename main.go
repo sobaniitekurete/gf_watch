@@ -7,6 +7,8 @@ import (
 	"log"
 	"math"
 	"os"
+	"regexp"
+	"strconv"
 	"time"
 
 	"os/exec"
@@ -14,10 +16,20 @@ import (
 	"github.com/Comdex/imgo"
 )
 
-var Config struct {
-	NoxPath string // 夜神模拟器路径
-	Sleep   int64  // 等待间隔, 单位为秒
-}
+var (
+	Config struct {
+		AdbPath string // adb路径
+		Sleep   int64  // 等待间隔, 单位为秒
+	}
+
+	app struct {
+		device string
+		width  int
+		height int
+		dpi    int
+		tpl    string
+	}
+)
 
 func init() {
 	bytes, err := ioutil.ReadFile("./config.json")
@@ -29,34 +41,36 @@ func init() {
 	}
 }
 
-var device string
-
 func main() {
-	if b, err := exec.Command(Config.NoxPath+"nox_adb.exe", "devices").Output(); err != nil {
+	if b, err := exec.Command(Config.AdbPath, "devices").Output(); err != nil {
 		log.Fatalln(err)
 	} else {
 		fmt.Println(string(b))
 	}
 	fmt.Println("Please input your device serial number: ")
-	for device == "" {
-		fmt.Scanln(&device)
+	for app.device == "" {
+		fmt.Scanln(&app.device)
 	}
-	if err := exec.Command(Config.NoxPath+"nox_adb.exe", "-s", device,
-		"shell", "ls",
-	).Run(); err != nil {
-		log.Fatalln(err)
+
+	app.width, app.height, app.dpi = getSize()
+	if app.dpi != 240 {
+		panic("device dpi not 240")
+	} else if app.width == 0 || app.height == 0 {
+		panic("device width or height error")
 	}
+	app.tpl = fmt.Sprintf("./tpl/%vx%v.png", app.width, app.height)
 	fmt.Println("start-up success")
+
 	for {
 	TAT:
 		getScreenshot()
-		if cosineSimilarity(imgo.MustRead("./tpl/t0.png"), getT("./screenshot.png")) >= 0.98 {
-			log.Println("你的老婆回家啦 ヾ(•ω•`)o")
-			tap(450, 640) // 随便点个地方, 收回后勤支援
+		if cosineSimilarity(imgo.MustRead(app.tpl), getTpl("./screenshot.png")) >= 0.98 {
+			log.Println("go home")
+			tap(1, app.height-1) // 随便点个地方, 收回后勤支援
 			time.Sleep(time.Second * 1)
 			tap(743, 492) // 点击确定
 			time.Sleep(time.Second * 1)
-			tap(500, 200) // 摸摸老婆的头
+			tap(500, 200) // 摸摸头
 			time.Sleep(time.Second * 5)
 			goto TAT
 		}
@@ -79,7 +93,7 @@ func cosineSimilarity(matrix1 [][][]uint8,
 
 // 截取模拟器快照
 func getScreenshot() {
-	if err := exec.Command(Config.NoxPath+"nox_adb.exe", "-s", device,
+	if err := exec.Command(Config.AdbPath, "-s", app.device,
 		"shell", "/system/bin/screencap", "-p", "/sdcard/screenshot.png",
 	).Run(); err != nil {
 		log.Fatalln(err)
@@ -89,16 +103,16 @@ func getScreenshot() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	if err := exec.Command(Config.NoxPath+"nox_adb.exe", "-s", device,
+	if err := exec.Command(Config.AdbPath, "-s", app.device,
 		"pull", "/sdcard/screenshot.png", wd+`/screenshot.png`,
 	).Run(); err != nil {
 		log.Fatalln(err)
 	}
 }
 
-// 点击模拟器
-func tap(x int64, y int64) {
-	if err := exec.Command(Config.NoxPath+"nox_adb.exe", "-s", device,
+// 点击设备
+func tap(x int, y int) {
+	if err := exec.Command(Config.AdbPath, "-s", app.device,
 		"shell", "input", "tap", fmt.Sprint(x), fmt.Sprint(y),
 	).Run(); err != nil {
 		log.Fatalln(err)
@@ -106,13 +120,44 @@ func tap(x int64, y int64) {
 }
 
 // 截取模板
-func getT(fileName string) (img [][][]uint8) {
-	img = imgo.New3DSlice(67, 71, 4)
+func getTpl(fileName string) (img [][][]uint8) {
+	img = imgo.New3DSlice(50, 50, 4)
 	s := imgo.MustRead(fileName)
-	for i := 0; i < 67; i++ {
-		for h := 0; h < 71; h++ {
-			img[i][h] = append([]uint8{}, s[1213+i][649+h]...)
+	_height := len(s)
+	_width := 0
+	if _height > 0 {
+		_width = len(s[0])
+	}
+	if _height < 50 || _width < 50 {
+		return
+	}
+	for i := 0; i < 50; i++ {
+		_h := i
+		if _width < _height {
+			_h = _height - 50 + i
 		}
+		for h := 0; h < 50; h++ {
+			_w := _width - 50 + h
+			img[i][h] = append([]uint8{}, s[_h][_w]...)
+		}
+	}
+	return
+}
+
+// 获取设备分辨率
+func getSize() (_width, _height, _dpi int) {
+	// adb shell dumpsys window displays
+	b, err := exec.Command(Config.AdbPath, "-s", app.device,
+		"shell", "dumpsys", "window", "displays").Output()
+	if err != nil {
+		panic(err)
+	}
+	r, _ := regexp.Compile(`init=([0-9]{3,})x([0-9]{3,}) ([0-9]*)dpi`)
+	_size := r.FindAllStringSubmatch(string(b), -1)
+	if len(_size) == 1 && len(_size[0]) == 4 {
+		_width, _ = strconv.Atoi(_size[0][1])
+		_height, _ = strconv.Atoi(_size[0][2])
+		_dpi, _ = strconv.Atoi(_size[0][3])
 	}
 	return
 }
