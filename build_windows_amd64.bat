@@ -1,1 +1,1 @@
-go build -ldflags "-s -w" -o ./build/HK416×î°ô.exe
+go build -ldflags "-s -w"

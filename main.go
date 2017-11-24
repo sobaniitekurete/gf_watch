@@ -23,15 +23,18 @@ var (
 	}
 
 	app struct {
-		device string
-		width  int
-		height int
-		dpi    int
-		tpl    string
+		device     string
+		width      int
+		height     int
+		dpi        int
+		screenshot chan int
+		tap        chan int
 	}
 )
 
 func init() {
+	app.screenshot = make(chan int, 1)
+	app.tap = make(chan int, 1)
 	bytes, err := ioutil.ReadFile("./config.json")
 	if err != nil {
 		log.Fatalln(err)
@@ -39,6 +42,76 @@ func init() {
 	if err := json.Unmarshal(bytes, &Config); err != nil {
 		log.Fatalln(err)
 	}
+}
+
+func isOK(fileName string) (x, y int) {
+	im := imgo.MustRead(fileName)
+	h := len(im)
+	w := len(im[0])
+	if h < 11 || w < 11 ||
+		!DeepEqual_(im[10][w-10], []uint8{99, 101, 24, 255}) {
+		// log.Println(im[10][w-10])
+		return -1, -1
+	}
+	var oldRGBA []uint8
+	re := 0
+	for x := (h / 2); x < h; x++ {
+		for y := 0; y < w; y++ {
+			if len(oldRGBA) > 1 {
+				if im[x][y][0] == oldRGBA[0] &&
+					im[x][y][1] == oldRGBA[1] &&
+					im[x][y][2] == oldRGBA[2] {
+					re++
+				} else {
+					re = 0
+				}
+				if re >= 30 && DeepEqual_(im[x][y], []uint8{255, 180, 0, 255}) {
+					// log.Println("isOK", im[x][y])
+					return x, y
+				}
+			}
+			oldRGBA = im[x][y]
+		}
+	}
+	return -1, -1
+}
+
+func isGoHome(fileName string) bool {
+	im := imgo.MustRead(fileName)
+	h := len(im)
+	w := len(im[0])
+	var oldRGBA []uint8
+	re := 0
+	if h < 11 || w < 11 {
+		return false
+	} else if !DeepEqual_(im[10][w-10], []uint8{198, 203, 57, 255}) {
+		return false
+	}
+	for x := (h / 2); x < h; x++ {
+		for y := 0; y < (w / 2); y++ {
+			if len(oldRGBA) > 1 {
+				if DeepEqual(im[x][y], oldRGBA) &&
+					DeepEqual(oldRGBA, []uint8{255, 255, 255, 255}) {
+					hp := int(h / 30)
+					if x+hp < h {
+						for r := 0; r < hp; r++ {
+							if !DeepEqual(im[x+r][y], []uint8{255, 255, 255, 255}) {
+								if r >= hp-1 {
+									re++
+								}
+								break
+							}
+						}
+					}
+				}
+			}
+			oldRGBA = im[x][y]
+		}
+		if x >= (h/4)*3 {
+			break
+		}
+	}
+	return re >= 10
 }
 
 func main() {
@@ -53,46 +126,40 @@ func main() {
 	}
 
 	app.width, app.height, app.dpi = getSize()
-	if app.dpi != 240 {
-		panic("device dpi not 240")
-	} else if app.width == 0 || app.height == 0 {
-		panic("device width or height error")
-	}
-	app.tpl = fmt.Sprintf("./tpl/%vx%v.png", app.width, app.height)
 	fmt.Println("start-up success")
 
-	for {
-	TAT:
-		getScreenshot()
-		if cosineSimilarity(imgo.MustRead(app.tpl), getTpl("./screenshot.png")) >= 0.98 {
-			log.Println("go home")
-			tap(1, app.height-1) // 随便点个地方, 收回后勤支援
-			time.Sleep(time.Second * 1)
-			tap(743, 492) // 点击确定
-			time.Sleep(time.Second * 1)
-			tap(500, 200) // 摸摸头
-			time.Sleep(time.Second * 5)
-			goto TAT
+	go func() {
+		for {
+			getScreenshot("message")
+			x, y := isOK("./screenshot/message.png")
+			// log.Println(x, y)
+			if x > 0 && y > 0 {
+				log.Println("再次出征")
+				tap(y, x)
+				time.Sleep(time.Second * 1)
+				// os.Exit(0)
+			}
+			os.Remove("./screenshot/message.png")
+			time.Sleep(time.Second * time.Duration(Config.Sleep))
 		}
-		os.Remove("./screenshot.png")
-		time.Sleep(time.Second * time.Duration(Config.Sleep))
-	}
-}
-
-// 两图余弦相似度
-func cosineSimilarity(matrix1 [][][]uint8,
-	matrix2 [][][]uint8) (cossimi float64) {
-	myx := imgo.Matrix2Vector(matrix1)
-	myy := imgo.Matrix2Vector(matrix2)
-	cos1 := imgo.Dot(myx, myy)
-	cos21 := math.Sqrt(imgo.Dot(myx, myx))
-	cos22 := math.Sqrt(imgo.Dot(myy, myy))
-	cossimi = cos1 / (cos21 * cos22)
-	return
+	}()
+	go func() {
+		for {
+			getScreenshot("home")
+			if isGoHome("./screenshot/home.png") {
+				log.Println("后勤完毕")
+				tap(app.width-5, app.height-5)
+			}
+			os.Remove("./screenshot/home.png")
+			time.Sleep(time.Second * time.Duration(Config.Sleep))
+		}
+	}()
+	make(chan int) <- 0
 }
 
 // 截取模拟器快照
-func getScreenshot() {
+func getScreenshot(fileName string) {
+	app.screenshot <- 1
 	if err := exec.Command(Config.AdbPath, "-s", app.device,
 		"shell", "/system/bin/screencap", "-p", "/sdcard/screenshot.png",
 	).Run(); err != nil {
@@ -104,19 +171,22 @@ func getScreenshot() {
 		log.Fatalln(err)
 	}
 	if err := exec.Command(Config.AdbPath, "-s", app.device,
-		"pull", "/sdcard/screenshot.png", wd+`/screenshot.png`,
+		"pull", "/sdcard/screenshot.png", wd+`/screenshot/`+fileName+`.png`,
 	).Run(); err != nil {
 		log.Fatalln(err)
 	}
+	<-app.screenshot
 }
 
 // 点击设备
 func tap(x int, y int) {
+	app.tap <- 1
 	if err := exec.Command(Config.AdbPath, "-s", app.device,
 		"shell", "input", "tap", fmt.Sprint(x), fmt.Sprint(y),
 	).Run(); err != nil {
 		log.Fatalln(err)
 	}
+	<-app.tap
 }
 
 // 截取模板
@@ -160,4 +230,52 @@ func getSize() (_width, _height, _dpi int) {
 		_dpi, _ = strconv.Atoi(_size[0][3])
 	}
 	return
+}
+
+// 两图余弦相似度
+func cosineSimilarity(matrix1 [][][]uint8,
+	matrix2 [][][]uint8) (cossimi float64) {
+	myx := imgo.Matrix2Vector(matrix1)
+	myy := imgo.Matrix2Vector(matrix2)
+	cos1 := imgo.Dot(myx, myy)
+	cos21 := math.Sqrt(imgo.Dot(myx, myx))
+	cos22 := math.Sqrt(imgo.Dot(myy, myy))
+	cossimi = cos1 / (cos21 * cos22)
+	return
+}
+
+func DeepEqual_(a, b []uint8) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	if (a == nil) != (b == nil) {
+		return false
+	}
+	for i, v := range a {
+		if !(b[i] < v+10 && b[i] > v-10 || v == b[i]) {
+			return false
+		}
+		// if v != b[i] {
+		// 	return false
+		// }
+	}
+	return true
+}
+
+func DeepEqual(a, b []uint8) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	if (a == nil) != (b == nil) {
+		return false
+	}
+	for i, v := range a {
+		if !(b[i] < v+10 && b[i] > v-10 || v == b[i]) {
+			return false
+		}
+		// if v != b[i] {
+		// 	return false
+		// }
+	}
+	return true
 }
