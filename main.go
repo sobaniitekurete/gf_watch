@@ -225,8 +225,15 @@ func getSize() (_height, _width, _dpi int) {
 	r, _ := regexp.Compile(`init=([0-9]{3,})x([0-9]{3,}) ([0-9]*)dpi`)
 	_size := r.FindAllStringSubmatch(string(b), -1)
 	if len(_size) == 1 && len(_size[0]) == 4 {
-		_width, _ = strconv.Atoi(_size[0][1])
-		_height, _ = strconv.Atoi(_size[0][2])
+		a_, _ := strconv.Atoi(_size[0][1])
+		b_, _ := strconv.Atoi(_size[0][2])
+		if a_ > b_ {
+			_height = b_
+			_width = a_
+		} else {
+			_height = a_
+			_width = b_
+		}
 		_dpi, _ = strconv.Atoi(_size[0][3])
 	}
 	return
