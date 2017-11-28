@@ -215,7 +215,7 @@ func getTpl(fileName string) (img [][][]uint8) {
 }
 
 // 获取设备分辨率
-func getSize() (_width, _height, _dpi int) {
+func getSize() (_height, _width, _dpi int) {
 	// adb shell dumpsys window displays
 	b, err := exec.Command(Config.AdbPath, "-s", app.device,
 		"shell", "dumpsys", "window", "displays").Output()
