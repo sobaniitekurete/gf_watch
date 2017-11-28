@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"math"
 	"os"
 	"regexp"
 	"strconv"
@@ -126,6 +125,7 @@ func main() {
 	}
 
 	app.width, app.height, app.dpi = getSize()
+	fmt.Println("size", app.width, app.height, app.dpi)
 	fmt.Println("start-up success")
 
 	go func() {
@@ -215,7 +215,7 @@ func getTpl(fileName string) (img [][][]uint8) {
 }
 
 // 获取设备分辨率
-func getSize() (_height, _width, _dpi int) {
+func getSize() (_width, _height, _dpi int) {
 	// adb shell dumpsys window displays
 	b, err := exec.Command(Config.AdbPath, "-s", app.device,
 		"shell", "dumpsys", "window", "displays").Output()
@@ -236,18 +236,6 @@ func getSize() (_height, _width, _dpi int) {
 		}
 		_dpi, _ = strconv.Atoi(_size[0][3])
 	}
-	return
-}
-
-// 两图余弦相似度
-func cosineSimilarity(matrix1 [][][]uint8,
-	matrix2 [][][]uint8) (cossimi float64) {
-	myx := imgo.Matrix2Vector(matrix1)
-	myy := imgo.Matrix2Vector(matrix2)
-	cos1 := imgo.Dot(myx, myy)
-	cos21 := math.Sqrt(imgo.Dot(myx, myx))
-	cos22 := math.Sqrt(imgo.Dot(myy, myy))
-	cossimi = cos1 / (cos21 * cos22)
 	return
 }
 
