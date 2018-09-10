@@ -48,7 +48,7 @@ func isOK(fileName string) (x, y int) {
 	h := len(im)
 	w := len(im[0])
 	if h < 11 || w < 11 ||
-		!DeepEqual_(im[10][w-10], []uint8{99, 101, 24, 255}) {
+		DeepEqual_(im[40][w-385], []uint8{49, 49, 49, 255}) {
 		// log.Println(im[10][w-10])
 		return -1, -1
 	}
@@ -64,8 +64,11 @@ func isOK(fileName string) (x, y int) {
 				} else {
 					re = 0
 				}
-				if re >= 30 && DeepEqual_(im[x][y], []uint8{255, 180, 0, 255}) {
+				if DeepEqual_(im[x][y], []uint8{255, 180, 0, 255}) {
 					// log.Println("isOK", im[x][y])
+					if DeepEqual_(im[40][w-385], []uint8{49, 49, 49, 255}) {
+						return -1, -1
+					}
 					return x, y
 				}
 			}
@@ -83,7 +86,7 @@ func isGoHome(fileName string) bool {
 	re := 0
 	if h < 11 || w < 11 {
 		return false
-	} else if !DeepEqual_(im[10][w-10], []uint8{198, 203, 57, 255}) {
+	} else if DeepEqual_(im[31][w-375], []uint8{255, 178, 0, 255}) && DeepEqual_(im[40][w-385], []uint8{49, 49, 49, 255}) {
 		return false
 	}
 	for x := (h / 2); x < h; x++ {
@@ -120,6 +123,7 @@ func main() {
 		fmt.Println(string(b))
 	}
 	fmt.Println("Please input your device serial number: ")
+	app.device = "192.168.56.101:5555"
 	for app.device == "" {
 		fmt.Scanln(&app.device)
 	}
@@ -148,7 +152,7 @@ func main() {
 			getScreenshot("home")
 			if isGoHome("./screenshot/home.png") {
 				log.Println("后勤完毕")
-				tap(app.width-5, app.height-5)
+				tap(app.width-282, app.height-5)
 			}
 			os.Remove("./screenshot/home.png")
 			time.Sleep(time.Second * time.Duration(Config.Sleep))

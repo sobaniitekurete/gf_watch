@@ -1,4 +1,4 @@
 {
-  "AdbPath":"D:\\Program Files (x86)\\Nox\\bin\\nox_adb.exe",
+  "AdbPath":"/usr/local/bin/adb",
   "Sleep":1
 }
