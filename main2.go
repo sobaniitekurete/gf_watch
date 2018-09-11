@@ -6,6 +6,7 @@ import (
 	"github.com/Comdex/imgo"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"os"
 	"os/exec"
 	"regexp"
@@ -118,7 +119,7 @@ func isGoHome(fileName string) bool {
 }
 
 func main() {
-
+	rand.Seed(time.Now().UnixNano())
 	//
 	//if b, err := exec.Command(Config.AdbPath, "connect", "127.0.0.1:7555").Output(); err != nil {
 	//	log.Fatalln(err)
@@ -149,13 +150,13 @@ func main() {
 			//log.Println(x, y)
 			if x > 0 && y > 0 {
 				log.Println("再次出征")
-				tap(y, x)
+				tap(y, x+rand.Intn(10))
 				//tap(1146, 636)
 				time.Sleep(time.Second * 1)
 				// os.Exit(0)
 			}
 			os.Remove("./screenshot/message.png")
-			time.Sleep(time.Second * time.Duration(Config.Sleep))
+			time.Sleep(time.Second * time.Duration(rand.Int63n(5)+Config.Sleep))
 		}
 	}()
 	go func() {
@@ -163,10 +164,10 @@ func main() {
 			getScreenshot("home")
 			if isGoHome("./screenshot/home.png") {
 				log.Println("后勤完毕")
-				tap(app.width-5, app.height-5)
+				tap(app.width-rand.Intn(4)-5, app.height-rand.Intn(3)-5)
 			}
 			os.Remove("./screenshot/home.png")
-			time.Sleep(time.Second * time.Duration(Config.Sleep))
+			time.Sleep(time.Second * time.Duration(rand.Int63n(5)+Config.Sleep))
 		}
 	}()
 	make(chan int) <- 0
